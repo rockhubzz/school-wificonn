@@ -20,6 +20,10 @@ function esc(s: string): string {
   );
 }
 
+function namesMatch(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 function page(title: string, body: string, status = 200): Response {
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
 <style>body{font-family:system-ui,sans-serif;background:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;color:#0f172a}
@@ -84,7 +88,8 @@ export async function POST(req: NextRequest) {
   const parsed = loginSchema.safeParse(raw);
   if (!parsed.success) return page("Invalid request", parsed.error.issues[0]?.message ?? "Bad input", 400);
 
-  const { studentId, nama, kelas, ip, target, reason } = parsed.data;
+  const { studentId, nama, kelas, ip, target: rawTarget, reason } = parsed.data;
+  const target = rawTarget || "https://www.google.com";
   let mac: string;
   try { mac = normalize(parsed.data.mac); }
   catch { return page("Invalid request", "Bad MAC address", 400); }
@@ -106,8 +111,8 @@ export async function POST(req: NextRequest) {
       update: { studentId: created.id, approved: false, reason: "first-registration" },
       create: { macAddress: mac, studentId: created.id, approved: false, reason: "first-registration" },
     });
-    void refreshDeviceHostname(mac, device.id).catch(() => {});
-    const waitHtml = buildWaitingPage({ studentId, nama, kelas, mac, ip, target: target ?? "", portalBase });
+    void refreshDeviceHostname(mac, device.id).catch(() => { });
+    const waitHtml = buildWaitingPage({ studentId, nama, kelas, mac, ip, target: target, portalBase });
     return new Response(waitHtml, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 
   }
@@ -119,6 +124,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(portalUrl("/api/denied", req));
   }
 
+  // 2b) Existing student but name/class mismatch (case-insensitive)
+  if (
+    student.nama &&
+    student.nama.length >= 2 &&
+    student.kelas &&
+    student.kelas.length >= 1 &&
+    (!namesMatch(student.nama, nama) || !namesMatch(student.kelas, kelas))
+  ) {
+    return page(
+      "Data tidak cocok",
+      `<p>NIM <strong>${esc(studentId)}</strong> sudah terdaftar dengan data yang berbeda</p>
+       <p>Pastikan nama dan kelas sudah benar.</p>
+       <p>Jika anda merasa ini adalah kesalahan, hubungi administrator jaringan anda.</p>
+       <p style="margin-top:16px"><a href="javascript:history.back()" style="color:#0f172a;font-weight:600;text-decoration:underline">Kembali</a></p>`,
+      409,
+    );
+  }
+
   // 3) Pending — keep polling so the page updates when admin approves
   if (student.status === "PENDING") {
     const waitHtml = buildWaitingPage({
@@ -127,7 +150,7 @@ export async function POST(req: NextRequest) {
       kelas: student.kelas.length >= 1 ? student.kelas : kelas,
       mac,
       ip,
-      target: target ?? "",
+      target: target,
       portalBase,
     });
     return new Response(waitHtml, {
@@ -138,7 +161,7 @@ export async function POST(req: NextRequest) {
 
   // 4) ACTIVE
   const existingForMac = student.devices.find((d) => d.macAddress === mac);
-  const successUrl = resolveContinueUrl(target ?? "");
+  const successUrl = resolveContinueUrl(target);
   const approvedDeviceCount = student.devices.filter((d) => d.approved).length;
 
   // 4a) This MAC already approved -> refresh router auth and show success page
@@ -154,7 +177,7 @@ export async function POST(req: NextRequest) {
       kelas: student.kelas,
       mac,
       ip,
-      target: target ?? "",
+      target: target,
       portalBase,
     });
     return new Response(waitHtml, {
@@ -184,7 +207,7 @@ export async function POST(req: NextRequest) {
   // 4d) Student already has approved device(s) -> require reason for additional device
   const normalizedReason = reason?.trim() ?? "";
   if (normalizedReason.length < 5) {
-    return reasonForm(studentId, student.nama, student.kelas, mac, ip, target ?? "", portalBase);
+    return reasonForm(studentId, student.nama, student.kelas, mac, ip, target, portalBase);
   }
 
   await db.device.upsert({
@@ -192,14 +215,14 @@ export async function POST(req: NextRequest) {
     update: { studentId: student.id, approved: false, reason: normalizedReason },
     create: { macAddress: mac, studentId: student.id, approved: false, reason: normalizedReason },
   });
-  void refreshDeviceHostname(mac).catch(() => {});
+  void refreshDeviceHostname(mac).catch(() => { });
   const waitHtml = buildWaitingPage({
     studentId,
     nama: student.nama,
     kelas: student.kelas,
     mac,
     ip,
-    target: target ?? "",
+    target: target,
     portalBase,
   });
   return new Response(waitHtml, {

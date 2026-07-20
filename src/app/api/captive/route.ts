@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { safeNormalize } from "@/lib/mac";
 import { db } from "@/lib/db";
 import { buildWaitingPage } from "@/lib/wait-page";
-import { resolveContinueUrl } from "@/lib/hotspot";
+import { resolveContinueUrl, hotspotStatusUrl } from "@/lib/hotspot";
 import { portalPublicBase, portalUrl } from "@/lib/portal-url";
 import { shouldBlockPortalAccess } from "@/lib/access-policy";
 import { getClientIp, isStaffVlanIp } from "@/lib/client-ip";
@@ -133,10 +133,25 @@ function buildLoginPage(mac: string, ip: string, target: string, portalBase: str
     button{margin-top:4px;width:100%;background:#0f172a;color:#fff;border:0;border-radius:8px;padding:12px;font-size:15px;cursor:pointer}
     button:hover{background:#1e293b}
     .meta{font-size:11px;color:#94a3b8;margin-top:16px;text-align:center}
+    #confirmOverlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100;align-items:center;justify-content:center}
+    #confirmOverlay.show{display:flex}
+    #confirmBox{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px;max-width:400px;width:90%;box-shadow:0 10px 30px -10px rgba(0,0,0,.15);text-align:center}
+    #confirmBox h2{margin:0 0 6px;font-size:18px}
+    #confirmBox .warn{color:#b45309;font-size:13px;margin:0 0 16px}
+    #confirmBox .row{display:flex;justify-content:space-between;font-size:14px;padding:8px 0;border-bottom:1px solid #f1f5f9;text-align:left}
+    #confirmBox .row:last-child{border-bottom:none}
+    #confirmBox .lbl{color:#64748b;min-width:80px}
+    #confirmBox .val{color:#0f172a;font-weight:500}
+    #confirmBox .btns{display:flex;gap:10px;margin-top:20px}
+    #confirmBox .btns button{flex:1;padding:11px;font-size:14px;border-radius:8px;cursor:pointer;border:0;font-weight:500}
+    #confirmBox .btn-back{background:#f1f5f9;color:#334155}
+    #confirmBox .btn-back:hover{background:#e2e8f0}
+    #confirmBox .btn-next{background:#0f172a;color:#fff}
+    #confirmBox .btn-next:hover{background:#1e293b}
   </style>
 </head>
 <body>
-  <form class="card" method="POST" action="${esc(loginUrl)}" autocomplete="off">
+  <form id="regForm" class="card" method="POST" action="${esc(loginUrl)}" autocomplete="off">
     <h1>Login Jaringan Sekolah</h1>
     <p>Isi data berikut untuk mengakses internet.</p>
     <label for="studentId">NIS / Student ID</label>
@@ -151,6 +166,38 @@ function buildLoginPage(mac: string, ip: string, target: string, portalBase: str
     <button type="submit">Daftar / Connect</button>
     <div class="meta">Perangkat: ${esc(mac || "unknown")} · ${esc(ip || "unknown")}</div>
   </form>
+
+  <div id="confirmOverlay">
+    <div id="confirmBox">
+      <h2>Konfirmasi Data</h2>
+      <p class="warn">Pastikan data yang anda masukkan sudah sesuai.</p>
+      <div class="row"><span class="lbl">NIS</span><span class="val" id="cSid"></span></div>
+      <div class="row"><span class="lbl">Nama</span><span class="val" id="cNama"></span></div>
+      <div class="row"><span class="lbl">Kelas</span><span class="val" id="cKelas"></span></div>
+      <div class="btns">
+        <button type="button" class="btn-back" onclick="hideConfirm()">Kembali</button>
+        <button type="button" class="btn-next" onclick="doSubmit()">Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var f = document.getElementById('regForm');
+    f.addEventListener('submit', function(e) {
+      e.preventDefault();
+      document.getElementById('cSid').textContent = document.getElementById('studentId').value;
+      document.getElementById('cNama').textContent = document.getElementById('nama').value;
+      document.getElementById('cKelas').textContent = document.getElementById('kelas').value;
+      document.getElementById('confirmOverlay').className = 'show';
+    });
+    function hideConfirm() {
+      document.getElementById('confirmOverlay').className = '';
+    }
+    function doSubmit() {
+      document.getElementById('confirmOverlay').className = '';
+      f.submit();
+    }
+  </script>
 </body>
 </html>`;
 }
@@ -163,8 +210,14 @@ export async function GET(req: NextRequest) {
   const u = req.nextUrl;
   const mac = safeNormalize(u.searchParams.get("mac")) ?? "";
   const ip = u.searchParams.get("ip") ?? "";
-  const target = u.searchParams.get("target") ?? "";
+  const target = u.searchParams.get("target") || "https://www.google.com";
   const portalBase = portalPublicBase(req);
+
+  // Manual URL entry without mac/ip — send through the hotspot gateway
+  // which will redirect back with the correct parameters filled in.
+  if (!mac || !ip) {
+    return NextResponse.redirect(hotspotStatusUrl());
+  }
 
   if (mac) {
     const device = await db.device.findUnique({
