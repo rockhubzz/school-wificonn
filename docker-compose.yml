@@ -1,0 +1,14 @@
+services:
+  captive-portal:
+    build: .
+    container_name: captive-portal
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    env_file:
+      - .env
+    volumes:
+      - db-data:/app/prisma
+
+volumes:
+  db-data:

@@ -93,6 +93,53 @@ You need two things: a **MikroTik router** configured with VLANs and a hotspot, 
 - Ubuntu Server 22.04+ (or any Linux with systemd)
 - Node.js 22+ (or Docker)
 
+### Fresh Server Dependencies
+
+Starting from a freshly installed Ubuntu Server, install these before deploying:
+
+```bash
+# System packages
+sudo apt-get update
+sudo apt-get install -y \
+  curl \
+  git \
+  build-essential \
+  sqlite3 \
+  openssl \
+  ca-certificates \
+  gnupg \
+  lsb-release
+```
+
+**Docker path** — install Docker Engine:
+
+```bash
+# Add Docker's official GPG key
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Add the Docker repository
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+# Enable Docker to start on boot
+sudo systemctl enable docker
+sudo systemctl start docker
+```
+
+**Node.js path** (if not using Docker) — install Node.js 22+:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
 ---
 
 ### Part 1 — MikroTik Router Setup
@@ -167,19 +214,26 @@ cp .env.example .env   # or create manually
 
 Fill in `.env` (see [Environment Variables](#environment-variables) below).
 
-Build and run:
+Build and run with Docker Compose:
 
 ```bash
-docker build -t captive-portal .
-docker run -d \
-  --name captive-portal \
-  --env-file .env \
-  --restart unless-stopped \
-  -p 80:80 \
-  captive-portal
+docker compose up -d --build
 ```
 
-The entrypoint script automatically runs `prisma migrate deploy` on container start, then launches the app. For subsequent deployments with schema changes, just rebuild the image — migrations apply on startup.
+The `docker-compose.yml` configures the container with `restart: unless-stopped`, so it **auto-starts on boot** after the initial setup — no systemd unit needed. Docker itself must also be enabled on boot (see [Fresh Server Dependencies](#fresh-server-dependencies)).
+
+The entrypoint script automatically runs `prisma migrate deploy` on container start, then launches the app. For subsequent deployments with schema changes, just rebuild — migrations apply on startup.
+
+```bash
+# Rebuild after code changes
+docker compose up -d --build
+
+# View logs
+docker compose logs -f
+
+# Stop
+docker compose down
+```
 
 **Creating the first admin user (Docker):**
 

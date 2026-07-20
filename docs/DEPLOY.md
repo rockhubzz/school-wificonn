@@ -4,6 +4,46 @@ Assumes Ubuntu Server 22.04+ on a small box wired to a port that the managed
 switch presents as **untagged VLAN 10** (or to a NIC that itself does the
 VLAN-10 tag).
 
+## 0. Fresh Server — Install System Dependencies
+
+From a bare Ubuntu install, install required packages first:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  curl \
+  git \
+  build-essential \
+  sqlite3 \
+  openssl \
+  ca-certificates \
+  gnupg \
+  lsb-release
+```
+
+**Docker path** (if deploying with Docker instead of systemd):
+
+```bash
+# Add Docker's official GPG key and repository
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+# Enable Docker to start automatically on boot
+sudo systemctl enable docker
+sudo systemctl start docker
+
+# Then follow the Docker section in the main README.md
+```
+
 ## 1. Static IP
 
 `/etc/netplan/00-portal.yaml`:
