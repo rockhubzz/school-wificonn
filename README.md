@@ -18,7 +18,7 @@ A self-hosted captive portal backend for school networks, built with **Next.js 1
         VLAN 10  VLAN 20  VLAN 30
       Servers   Staff    Students (captive portal)
 
-  VLAN 10  192.168.10.0/24   gw .1   Backend server @ .2 (static)
+  VLAN 10  192.168.10.0/24   gw .1   Backend server @ .10 (static)
   VLAN 20  192.168.20.0/24   gw .1   Staff — no portal
   VLAN 30  192.168.30.0/24   gw .1   Students — hotspot + external login
 ```
