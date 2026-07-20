@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { RefreshCw, Loader2, Smartphone, CheckCircle2, XCircle } from "lucide-react";
 
 type Row = {
   id: string;
@@ -15,6 +16,12 @@ type ActionPayload = {
   deviceId?: string;
   studentId?: string;
 };
+
+function StudentStatusBadge({ status }: { status: string }) {
+  if (status === "ACTIVE")  return <span className="badge-status badge-active">Active</span>;
+  if (status === "DENIED")  return <span className="badge-status badge-denied">Denied</span>;
+  return <span className="badge-status badge-pending">Pending</span>;
+}
 
 export default function DevicesPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -42,21 +49,11 @@ export default function DevicesPage() {
 
   async function act(path: string, payload: ActionPayload) {
     const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    if (!res.ok) {
-      alert(await res.text());
-      return;
-    }
-
-    if (path.includes("approve-device")) {
+    if (!res.ok) { alert(await res.text()); return; }
+    if (path.includes("approve-device") || path.includes("reject-device")) {
       setRows((prev) => prev.filter((row) => row.id !== payload.deviceId));
       return;
     }
-
-    if (path.includes("reject-device")) {
-      setRows((prev) => prev.filter((row) => row.id !== payload.deviceId));
-      return;
-    }
-
     await load();
   }
 
@@ -66,54 +63,110 @@ export default function DevicesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Pending device requests</h1>
-      <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
-        <table className="w-full text-sm min-w-[900px]">
-          <thead className="bg-slate-50 text-left">
-            <tr>
-              <th className="p-3">Student</th>
-              <th className="p-3">Nama</th>
-              <th className="p-3">Kelas</th>
-              <th className="p-3">MAC</th>
-              <th className="p-3">Hostname</th>
-              <th className="p-3">Reason</th>
-              <th className="p-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {busy && <tr><td colSpan={7} className="p-4 text-slate-500">Loading…</td></tr>}
-            {!busy && rows.length === 0 && <tr><td colSpan={7} className="p-4 text-slate-500">No pending requests.</td></tr>}
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-slate-100">
-                <td className="p-3">
-                  <Link href={`/admin/students/${r.student.id}`} className="font-mono text-slate-900 hover:text-blue-700 hover:underline">
-                    {r.student.studentId}
-                  </Link>
-                  <span className="text-xs text-slate-500 ml-1">({r.student.status})</span>
-                </td>
-                <td className="p-3">{r.student.nama || "—"}</td>
-                <td className="p-3">{r.student.kelas || "—"}</td>
-                <td className="p-3 font-mono">{r.macAddress}</td>
-                <td className="p-3">{r.hostname ?? "—"}</td>
-                <td className="p-3">{r.reason ?? "—"}</td>
-                <td className="p-3 space-x-2 whitespace-nowrap">
-                  <button
-                    onClick={() => act("/api/admin/approve-device", { deviceId: r.id })}
-                    disabled={r.student.status !== "ACTIVE"}
-                    title={r.student.status !== "ACTIVE" ? "Approve or re-approve the student first" : ""}
-                    className="px-2 py-1 text-xs bg-green-600 text-white rounded disabled:opacity-40"
-                  >{r.reason === "revoked-by-admin" ? "Re-approve" : "Approve"}</button>
-                  {r.reason !== "revoked-by-admin" && (
-                    <button onClick={() => handleReject(r.id, r.macAddress)}
-                      className="px-2 py-1 text-xs bg-red-600 text-white rounded">Reject</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <div className="page-header">
+        <h1 className="page-title">Device Requests</h1>
+        <p className="page-subtitle">Review and approve pending device registrations</p>
       </div>
-    </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <h2 className="panel-title">
+            Pending Requests
+            {!busy && (
+              <span style={{ color: "var(--text-muted)", fontWeight: 400, marginLeft: 8, fontSize: ".78rem" }}>
+                ({rows.length})
+              </span>
+            )}
+          </h2>
+          <button onClick={load} className="btn-admin btn-ghost-admin" style={{ fontSize: ".78rem" }}>
+            <RefreshCw size={13} /> Refresh
+          </button>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Name</th>
+                <th>Class</th>
+                <th>Student Status</th>
+                <th>MAC Address</th>
+                <th>Hostname</th>
+                <th>Reason</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {busy && (
+                <tr>
+                  <td colSpan={8}>
+                    <div className="empty-state">
+                      <Loader2 size={28} style={{ margin: "0 auto 10px", display: "block", opacity: .5, animation: "spin 1s linear infinite" }} />
+                      Loading device requests…
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {!busy && rows.length === 0 && (
+                <tr>
+                  <td colSpan={8}>
+                    <div className="empty-state">
+                      <Smartphone size={36} style={{ margin: "0 auto 12px", display: "block", opacity: .3 }} />
+                      No pending device requests.
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td>
+                    <Link
+                      href={`/admin/students/${r.student.id}`}
+                      className="mono"
+                      style={{ color: "var(--accent)", textDecoration: "none" }}
+                    >
+                      {r.student.studentId}
+                    </Link>
+                  </td>
+                  <td style={{ color: "var(--text-primary)", fontWeight: 500 }}>{r.student.nama || "—"}</td>
+                  <td className="mono" style={{ fontSize: ".8rem" }}>{r.student.kelas || "—"}</td>
+                  <td><StudentStatusBadge status={r.student.status} /></td>
+                  <td className="mono" style={{ color: "var(--text-secondary)", fontSize: ".82rem" }}>{r.macAddress}</td>
+                  <td style={{ color: "var(--text-muted)" }}>{r.hostname ?? "—"}</td>
+                  <td style={{ color: "var(--text-muted)", fontSize: ".8rem" }}>{r.reason ?? "—"}</td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        onClick={() => act("/api/admin/approve-device", { deviceId: r.id })}
+                        disabled={r.student.status !== "ACTIVE"}
+                        title={r.student.status !== "ACTIVE" ? "Approve or re-approve the student first" : ""}
+                        className="btn-admin btn-success-admin"
+                      >
+                        <CheckCircle2 size={13} />
+                        {r.reason === "revoked-by-admin" ? "Re-approve" : "Approve"}
+                      </button>
+                      {r.reason !== "revoked-by-admin" && (
+                        <button
+                          onClick={() => handleReject(r.id, r.macAddress)}
+                          className="btn-admin btn-danger-admin"
+                        >
+                          <XCircle size={13} /> Reject
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
+    </>
   );
 }
