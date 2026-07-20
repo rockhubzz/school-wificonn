@@ -1,0 +1,24 @@
+[Unit]
+Description=Captive Portal Backend (Next.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=portal
+Group=portal
+WorkingDirectory=/opt/captive-portal
+EnvironmentFile=/opt/captive-portal/.env
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -p 80
+Restart=on-failure
+RestartSec=3
+# Allow binding to privileged port :80 as non-root user
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/captive-portal/prisma
+
+[Install]
+WantedBy=multi-user.target
