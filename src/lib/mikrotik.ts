@@ -794,3 +794,185 @@ export async function pingRouter(): Promise<{ ok: true; identity: string }> {
   const rows = (await run(["/system/identity/print"])) as Array<Record<string, string>>;
   return { ok: true, identity: rows[0]?.name ?? "unknown" };
 }
+
+/**
+ * Map MAC addresses to IP addresses using hotspot host, active sessions, or DHCP leases.
+ * If `macs` is omitted, maps all hotspot users (approved devices).
+ */
+export async function mapMacsToIpAddresses(macs?: string[]): Promise<Record<string, string | null>> {
+  const needleMacs = macs && macs.length > 0 ? macs.map((m) => normalizeMacKey(m)) : null;
+
+  let candidates: string[] = [];
+  if (needleMacs) {
+    candidates = needleMacs;
+  } else {
+    const users = await listApprovedDevices();
+    candidates = users.map((u) => normalizeMacKey((u["mac-address"] ?? u.name ?? "").toString()));
+  }
+
+  const out: Record<string, string | null> = {};
+  for (const macRaw of candidates) {
+    const mac = macRaw;
+    if (!mac) continue;
+    // try hotspot host entry
+    try {
+      const host = await findHostByMac(mac);
+      const ip = host ? pickAddress(host) : null;
+      if (ip) {
+        out[mac] = ip;
+        continue;
+      }
+    } catch (err) {
+      // ignore and try next
+    }
+
+    // try active sessions
+    try {
+      const active = await findActiveByMac(mac);
+      if (active && active.length > 0) {
+        const ip = pickAddress(active[0]);
+        if (ip) {
+          out[mac] = ip;
+          continue;
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+
+    // try DHCP lease
+    try {
+      const leases = (await run([
+        "/ip/dhcp-server/lease/print",
+        `?mac-address=${mac}`,
+      ])) as Array<Record<string, string>>;
+      if (leases.length > 0) {
+        const ip = pickAddress(leases[0]);
+        if (ip) {
+          out[mac] = ip;
+          continue;
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+
+    out[mac] = null;
+  }
+
+  return out;
+}
+
+function parseBytes(value: string | number | undefined): number {
+  if (typeof value === "number") return value;
+  if (!value) return 0;
+  const str = String(value).trim();
+  const num = parseFloat(str);
+  return Number.isFinite(num) && num >= 0 ? num : 0;
+}
+
+/**
+ * Read current traffic statistics from the hotspot interface.
+ * Returns rx-byte, tx-byte counters and active session count.
+ */
+export async function getHotspotInterfaceStats(): Promise<{
+  rxBytes: number;
+  txBytes: number;
+  activeSessions: number;
+} | null> {
+  try {
+    // Get the hotspot interface name from env or default to "hotspot1"
+    const hotspotInterface = process.env.MIKROTIK_HOTSPOT_INTERFACE?.trim() || "hotspot1";
+    
+    const interfaces = (await run([
+      "/interface/print",
+      `?name=${hotspotInterface}`,
+    ])) as Array<Record<string, string | number>>;
+
+    if (interfaces.length === 0) return null;
+
+    const iface = interfaces[0];
+    const rxBytes = parseBytes(iface["rx-byte"]);
+    const txBytes = parseBytes(iface["tx-byte"]);
+
+    // Count active hotspot sessions
+    const active = (await run([
+      "/ip/hotspot/active/print",
+    ])) as Array<Record<string, string>>;
+
+    return {
+      rxBytes,
+      txBytes,
+      activeSessions: active.length,
+    };
+  } catch (err) {
+    console.warn("[mikrotik] failed to read interface stats", err);
+    return null;
+  }
+}
+
+/**
+ * Calculate average download/upload speeds based on active hotspot users.
+ * Queries the hotspot active table and sums up bytes-in/bytes-out.
+ * Returns speeds in Mbps.
+ */
+export async function getAverageNetworkSpeeds(): Promise<{
+  avgDownloadMbps: number;
+  avgUploadMbps: number;
+  peakDownloadMbps: number;
+  peakUploadMbps: number;
+  activeUsers: number;
+} | null> {
+  try {
+    const active = (await run([
+      "/ip/hotspot/active/print",
+    ])) as Array<Record<string, string | number>>;
+
+    if (active.length === 0) {
+      return {
+        avgDownloadMbps: 0,
+        avgUploadMbps: 0,
+        peakDownloadMbps: 0,
+        peakUploadMbps: 0,
+        activeUsers: 0,
+      };
+    }
+
+    let totalDownloadBytes = 0;
+    let totalUploadBytes = 0;
+    let maxDownloadBytes = 0;
+    let maxUploadBytes = 0;
+
+    for (const session of active) {
+      const bytesIn = parseBytes(session["bytes-in"]);
+      const bytesOut = parseBytes(session["bytes-out"]);
+      
+      totalDownloadBytes += bytesIn;
+      totalUploadBytes += bytesOut;
+      
+      if (bytesIn > maxDownloadBytes) maxDownloadBytes = bytesIn;
+      if (bytesOut > maxUploadBytes) maxUploadBytes = bytesOut;
+    }
+
+    // Convert bytes to Mbps (assuming session duration; use uptime if available)
+    // For a rough estimate: assume average session is 1 hour = 3600 seconds
+    // Speed (Mbps) = (bytes * 8) / (seconds * 1,000,000)
+    // Since we don't have precise timing, we'll compute per-session averages
+    const avgDownloadBytes = totalDownloadBytes / active.length;
+    const avgUploadBytes = totalUploadBytes / active.length;
+
+    // Rough conversion: assume 1-hour average session for speed estimation
+    const bytesToMbps = (bytes: number) => (bytes * 8) / (3600 * 1_000_000);
+
+    return {
+      avgDownloadMbps: parseFloat(bytesToMbps(avgDownloadBytes).toFixed(2)),
+      avgUploadMbps: parseFloat(bytesToMbps(avgUploadBytes).toFixed(2)),
+      peakDownloadMbps: parseFloat(bytesToMbps(maxDownloadBytes).toFixed(2)),
+      peakUploadMbps: parseFloat(bytesToMbps(maxUploadBytes).toFixed(2)),
+      activeUsers: active.length,
+    };
+  } catch (err) {
+    console.warn("[mikrotik] failed to calculate network speeds", err);
+    return null;
+  }
+}

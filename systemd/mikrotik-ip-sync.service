@@ -1,0 +1,17 @@
+[Unit]
+Description=Captive Portal MikroTik IP Sync (one-shot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=portal
+Group=portal
+WorkingDirectory=/opt/captive-portal
+EnvironmentFile=/opt/captive-portal/.env
+ExecStart=/opt/captive-portal/node_modules/.bin/tsx ./scripts/sync-mikrotik-ips.ts
+TimeoutStartSec=300
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

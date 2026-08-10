@@ -1,9 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Shield, AlertTriangle, Loader2, ArrowRight } from "lucide-react";
 
-export default function AdminLoginPage() {
+function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState("");
@@ -95,5 +95,23 @@ export default function AdminLoginPage() {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="login-bg">
+        <div className="login-card">
+          <div className="login-logo">
+            <Shield size={24} color="#fff" strokeWidth={2} />
+          </div>
+          <h1 className="login-title">Admin Sign In</h1>
+          <p className="login-subtitle">Loading...</p>
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

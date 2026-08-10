@@ -8,6 +8,7 @@
     "start": "next start -p 80",
     "lint": "next lint",
     "create-admin": "tsx scripts/create-admin.ts",
+    "sync:ips": "tsx scripts/sync-mikrotik-ips.ts",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:studio": "prisma studio"
   },

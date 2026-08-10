@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Captive Portal MikroTik IP Sync every 24 hours
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=24h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

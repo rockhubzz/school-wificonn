@@ -11,6 +11,7 @@ type Device = {
   id: string;
   macAddress: string;
   hostname: string | null;
+  ipAddress: string | null;
   approved: boolean;
   reason: string | null;
   createdAt: string;
@@ -32,10 +33,10 @@ type ActionPayload = {
 };
 
 function deviceStatus(d: Device, studentStatus: Student["status"]): { label: string; cls: string } {
-  if (d.approved)                        return { label: "Approved", cls: "badge-active" };
-  if (d.reason === "revoked-by-admin")   return { label: "Revoked",  cls: "badge-denied" };
-  if (d.reason === "denied-by-admin")    return { label: "Denied",   cls: "badge-denied" };
-  if (studentStatus === "DENIED")        return { label: "Denied",   cls: "badge-denied" };
+  if (d.approved) return { label: "Approved", cls: "badge-active" };
+  if (d.reason === "revoked-by-admin") return { label: "Revoked", cls: "badge-denied" };
+  if (d.reason === "denied-by-admin") return { label: "Denied", cls: "badge-denied" };
+  if (studentStatus === "DENIED") return { label: "Denied", cls: "badge-denied" };
   return { label: "Pending", cls: "badge-pending" };
 }
 
@@ -272,6 +273,7 @@ export default function StudentDetailPage() {
             <thead>
               <tr>
                 <th>MAC Address</th>
+                <th>IP Address</th>
                 <th>Hostname</th>
                 <th>Status</th>
                 <th>Reason</th>
@@ -282,7 +284,7 @@ export default function StudentDetailPage() {
             <tbody>
               {student.devices.length === 0 && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <div className="empty-state">
                       <Smartphone size={36} style={{ margin: "0 auto 12px", display: "block", opacity: .3 }} />
                       No devices registered yet.
@@ -296,6 +298,7 @@ export default function StudentDetailPage() {
                 return (
                   <tr key={d.id}>
                     <td className="mono" style={{ color: "var(--text-primary)" }}>{d.macAddress}</td>
+                    <td className="mono" style={{ color: "var(--text-secondary)", fontSize: ".82rem" }}>{d.ipAddress ?? "—"}</td>
                     <td style={{ color: "var(--text-secondary)" }}>{d.hostname ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
                     <td><span className={`badge-status ${ds.cls}`}>{ds.label}</span></td>
                     <td style={{ color: "var(--text-muted)", fontSize: ".8rem" }}>{d.reason ?? "—"}</td>

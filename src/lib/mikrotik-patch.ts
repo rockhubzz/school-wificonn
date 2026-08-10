@@ -55,7 +55,12 @@ function applyEmptyPatch(): void {
             }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            if (msg.includes("UNREGISTEREDTAG")) {
+            const errno = (err as any)?.errno;
+            const isUnregistered =
+              errno === "UNREGISTEREDTAG" ||
+              msg.includes("UNREGISTEREDTAG") ||
+              msg.toLowerCase().includes("unregistered tag");
+            if (isUnregistered) {
               try {
                 (this as { cleanUp?: () => void }).cleanUp?.();
               } catch { /* ignore */ }

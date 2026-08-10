@@ -7,6 +7,7 @@ type Row = {
   id: string;
   macAddress: string;
   hostname: string | null;
+  ipAddress: string | null;
   reason: string | null;
   createdAt: string;
   student: { id: string; studentId: string; nama: string; kelas: string; status: string };
@@ -18,8 +19,8 @@ type ActionPayload = {
 };
 
 function StudentStatusBadge({ status }: { status: string }) {
-  if (status === "ACTIVE")  return <span className="badge-status badge-active">Active</span>;
-  if (status === "DENIED")  return <span className="badge-status badge-denied">Denied</span>;
+  if (status === "ACTIVE") return <span className="badge-status badge-active">Active</span>;
+  if (status === "DENIED") return <span className="badge-status badge-denied">Denied</span>;
   return <span className="badge-status badge-pending">Pending</span>;
 }
 
@@ -93,6 +94,7 @@ export default function DevicesPage() {
                 <th>Class</th>
                 <th>Student Status</th>
                 <th>MAC Address</th>
+                <th>IP Address</th>
                 <th>Hostname</th>
                 <th>Reason</th>
                 <th>Actions</th>
@@ -101,7 +103,7 @@ export default function DevicesPage() {
             <tbody>
               {busy && (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className="empty-state">
                       <Loader2 size={28} style={{ margin: "0 auto 10px", display: "block", opacity: .5, animation: "spin 1s linear infinite" }} />
                       Loading device requests…
@@ -111,7 +113,7 @@ export default function DevicesPage() {
               )}
               {!busy && rows.length === 0 && (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className="empty-state">
                       <Smartphone size={36} style={{ margin: "0 auto 12px", display: "block", opacity: .3 }} />
                       No pending device requests.
@@ -134,6 +136,7 @@ export default function DevicesPage() {
                   <td className="mono" style={{ fontSize: ".8rem" }}>{r.student.kelas || "—"}</td>
                   <td><StudentStatusBadge status={r.student.status} /></td>
                   <td className="mono" style={{ color: "var(--text-secondary)", fontSize: ".82rem" }}>{r.macAddress}</td>
+                  <td className="mono" style={{ color: "var(--text-secondary)", fontSize: ".82rem" }}>{r.ipAddress ?? "—"}</td>
                   <td style={{ color: "var(--text-muted)" }}>{r.hostname ?? "—"}</td>
                   <td style={{ color: "var(--text-muted)", fontSize: ".8rem" }}>{r.reason ?? "—"}</td>
                   <td>

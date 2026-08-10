@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { normalize } from "@/lib/mac";
+import { getClientIp } from "@/lib/client-ip";
 import { loginSchema } from "@/lib/validators";
 import { take } from "@/lib/rateLimit";
 import {
@@ -88,7 +89,10 @@ export async function POST(req: NextRequest) {
   const parsed = loginSchema.safeParse(raw);
   if (!parsed.success) return page("Invalid request", parsed.error.issues[0]?.message ?? "Bad input", 400);
 
-  const { studentId, nama, kelas, ip, target: rawTarget, reason } = parsed.data;
+  const { studentId, nama, kelas, target: rawTarget, reason } = parsed.data;
+  // prefer IP provided by the hotspot, fall back to the request headers
+  const rawIpFromBody = (parsed.data as Record<string, any>).ip;
+  const ip = (rawIpFromBody && String(rawIpFromBody).trim()) || getClientIp(req) || "";
   const target = rawTarget || "https://www.google.com";
   let mac: string;
   try { mac = normalize(parsed.data.mac); }
@@ -108,8 +112,8 @@ export async function POST(req: NextRequest) {
     });
     const device = await db.device.upsert({
       where: { macAddress: mac },
-      update: { studentId: created.id, approved: false, reason: "first-registration" },
-      create: { macAddress: mac, studentId: created.id, approved: false, reason: "first-registration" },
+      update: { studentId: created.id, approved: false, reason: "first-registration", ipAddress: ip },
+      create: { macAddress: mac, studentId: created.id, approved: false, reason: "first-registration", ipAddress: ip },
     });
     void refreshDeviceHostname(mac, device.id).catch(() => { });
     const waitHtml = buildWaitingPage({ studentId, nama, kelas, mac, ip, target: target, portalBase });
@@ -190,8 +194,8 @@ export async function POST(req: NextRequest) {
   if (approvedDeviceCount === 0) {
     await db.device.upsert({
       where: { macAddress: mac },
-      update: { studentId: student.id, approved: true, reason: null },
-      create: { macAddress: mac, studentId: student.id, approved: true },
+      update: { studentId: student.id, approved: true, reason: null, ipAddress: ip },
+      create: { macAddress: mac, studentId: student.id, approved: true, ipAddress: ip },
     });
     try {
       await approveDevice(studentId, mac, ip, student.nama);
@@ -212,8 +216,8 @@ export async function POST(req: NextRequest) {
 
   await db.device.upsert({
     where: { macAddress: mac },
-    update: { studentId: student.id, approved: false, reason: normalizedReason },
-    create: { macAddress: mac, studentId: student.id, approved: false, reason: normalizedReason },
+    update: { studentId: student.id, approved: false, reason: normalizedReason, ipAddress: ip },
+    create: { macAddress: mac, studentId: student.id, approved: false, reason: normalizedReason, ipAddress: ip },
   });
   void refreshDeviceHostname(mac).catch(() => { });
   const waitHtml = buildWaitingPage({

@@ -1,10 +1,23 @@
+"use client";
 import Link from "next/link";
-import { getSession } from "@/lib/auth";
-import { Shield, LayoutDashboard, GraduationCap, Smartphone, LogOut, Wifi } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Shield, LayoutDashboard, GraduationCap, Smartphone, LogOut, User } from "lucide-react";
+import { useEffect, useState } from "react";
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const session = await getSession();
-  if (!session.adminId) return <>{children}</>;
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const [session, setSession] = useState<{ email?: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/students")
+      .then((res) => res.ok ? { email: "admin" } : null)
+      .then(setSession)
+      .catch(() => setSession(null));
+  }, []);
+
+  if (session === null || !session.email) return <>{children}</>;
+
+  const isActive = (path: string) => pathname === path;
 
   return (
     <div className="admin-shell">
@@ -13,32 +26,32 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         {/* Brand */}
         <Link href="/admin" className="sidebar-brand">
           <div className="sidebar-brand-icon">
-            <Shield size={18} color="#fff" />
+            <Shield size={20} color="#fff" strokeWidth={2.5} />
           </div>
           <div className="sidebar-brand-text">
-            CaptiveAdmin
-            <small>School Network</small>
+            School Portal
+            <small>Admin Dashboard</small>
           </div>
         </Link>
 
         {/* Nav */}
-        <p className="sidebar-section-title">Main Menu</p>
-        <ul className="sidebar-nav" style={{ padding: "6px 10px", listStyle: "none", margin: 0 }}>
+        <p className="sidebar-section-title">NAVIGATION</p>
+        <ul className="sidebar-nav" style={{ padding: "8px 14px", listStyle: "none", margin: 0 }}>
           <li className="sidebar-nav-item">
-            <Link href="/admin" className="sidebar-nav-link">
-              <span className="sidebar-nav-icon"><LayoutDashboard size={16} /></span>
+            <Link href="/admin" className={`sidebar-nav-link ${isActive("/admin") ? "active" : ""}`}>
+              <span className="sidebar-nav-icon"><LayoutDashboard size={18} /></span>
               Dashboard
             </Link>
           </li>
           <li className="sidebar-nav-item">
-            <Link href="/admin/students" className="sidebar-nav-link">
-              <span className="sidebar-nav-icon"><GraduationCap size={16} /></span>
+            <Link href="/admin/students" className={`sidebar-nav-link ${pathname?.startsWith("/admin/students") ? "active" : ""}`}>
+              <span className="sidebar-nav-icon"><GraduationCap size={18} /></span>
               Students
             </Link>
           </li>
           <li className="sidebar-nav-item">
-            <Link href="/admin/devices" className="sidebar-nav-link">
-              <span className="sidebar-nav-icon"><Smartphone size={16} /></span>
+            <Link href="/admin/devices" className={`sidebar-nav-link ${isActive("/admin/devices") ? "active" : ""}`}>
+              <span className="sidebar-nav-icon"><Smartphone size={18} /></span>
               Device Requests
             </Link>
           </li>
@@ -46,10 +59,33 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
         {/* Footer */}
         <div className="sidebar-footer">
-          <p className="sidebar-user-info">Signed in as: {session.email}</p>
-          <form action="/api/admin/logout" method="POST">
+          <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderTop: "1px solid var(--border)", marginTop: "auto" }}>
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, var(--accent), #8b5cf6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: ".9rem"
+            }}>
+              <User size={18} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: ".85rem", fontWeight: 600, margin: 0, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                Administrator
+              </p>
+              <p style={{ fontSize: ".72rem", color: "var(--text-muted)", margin: 0 }}>
+                System Admin
+              </p>
+            </div>
+          </div>
+          <form action="/api/admin/logout" method="POST" style={{ padding: "0 14px 12px" }}>
             <button className="sidebar-signout-btn" type="submit">
-              <LogOut size={14} /> Sign out
+              <LogOut size={16} /> Sign out
             </button>
           </form>
         </div>
@@ -57,11 +93,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
       {/* ── Topbar ── */}
       <header className="admin-topbar">
-        <span className="topbar-title">Admin Control Panel</span>
+        <span className="topbar-title">Captive Portal Admin</span>
         <span className="topbar-badge">
-          <span className="dot" />
-          <Wifi size={12} style={{ opacity: 0.7 }} />
-          System online
+          System Online
         </span>
       </header>
 
@@ -74,5 +108,3 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     </div>
   );
 }
-
-export const dynamic = "force-dynamic";

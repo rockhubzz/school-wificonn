@@ -28,6 +28,7 @@ model Device {
   id         String   @id @default(cuid())
   macAddress String   @unique
   hostname   String?
+  ipAddress  String?
   studentId  String
   student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   approved   Boolean  @default(false)
