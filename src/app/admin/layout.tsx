@@ -13,7 +13,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       .then((res) => res.ok ? { email: "admin" } : null)
       .then(setSession)
       .catch(() => setSession(null));
-  }, []);
+  }, [pathname]);
 
   if (session === null || !session.email) return <>{children}</>;
 

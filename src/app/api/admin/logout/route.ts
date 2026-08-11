@@ -4,5 +4,8 @@ export const dynamic = "force-dynamic";
 export async function POST() {
   const s = await getSession();
   await s.destroy();
-  return NextResponse.json({ ok: true });
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: "/admin/login" },
+  });
 }
