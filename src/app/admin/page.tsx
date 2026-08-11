@@ -1,12 +1,42 @@
 import { db } from "@/lib/db";
 import Link from "next/link";
-import { CheckCircle2, Clock, XCircle, Smartphone, ChevronRight, TrendingUp, Users, Wifi, Activity, ArrowUp, ArrowDown } from "lucide-react";
-import { isMikrotikConfigured, getAverageNetworkSpeeds } from "@/lib/mikrotik";
+import { Clock, Smartphone, ChevronRight, Users, Wifi, Activity } from "lucide-react";
+import { NetworkPerformancePanel, NetworkSpeedCards } from "@/components/network-live";
 
 export const dynamic = "force-dynamic";
 
+type Stat = {
+  label: string;
+  value: number;
+  unit?: string;
+  color: string;
+  Icon: typeof Users;
+  href: string;
+  subtitle: string;
+};
+
+function StatCard({ s }: { s: Stat }) {
+  return (
+    <Link key={s.label} href={s.href} style={{ textDecoration: "none" }}>
+      <div className="stat-card">
+        <div className={`stat-card-icon ${s.color}`}>
+          <s.Icon size={24} strokeWidth={2} />
+        </div>
+        <div className="stat-card-label">{s.label}</div>
+        <div className="stat-card-value">
+          {s.value}
+          {s.unit && <span style={{ fontSize: "1.2rem", fontWeight: 600, marginLeft: 6, color: "var(--text-muted)" }}>{s.unit}</span>}
+        </div>
+        <div className="stat-card-trend">
+          {s.subtitle}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 export default async function AdminDashboard() {
-  const [pending, active, denied, pendingDevices, totalStudents, approvedDevices, recentStudents, networkStats] = await Promise.all([
+  const [pending, active, denied, pendingDevices, totalStudents, approvedDevices, recentStudents] = await Promise.all([
     db.student.count({ where: { status: "PENDING" } }),
     db.student.count({ where: { status: "ACTIVE" } }),
     db.student.count({ where: { status: "DENIED" } }),
@@ -18,54 +48,10 @@ export default async function AdminDashboard() {
       orderBy: { createdAt: "desc" },
       include: { devices: true },
     }),
-    isMikrotikConfigured() ? getAverageNetworkSpeeds() : Promise.resolve(null),
   ]);
 
   // Calculate average devices per active student
   const avgDevicesPerStudent = active > 0 ? (approvedDevices / active).toFixed(1) : "0.0";
-
-  // Real network speed statistics from MikroTik (rounded to whole numbers)
-  const avgDownloadSpeed = networkStats ? Math.round(networkStats.avgDownloadMbps).toString() : "0";
-  const avgUploadSpeed = networkStats ? Math.round(networkStats.avgUploadMbps).toString() : "0";
-  const peakDownloadSpeed = networkStats ? Math.round(networkStats.peakDownloadMbps).toString() : "0";
-  const peakUploadSpeed = networkStats ? Math.round(networkStats.peakUploadMbps).toString() : "0";
-
-  const stats = [
-    {
-      label: "Total Students",
-      value: totalStudents,
-      color: "accent",
-      Icon: Users,
-      href: "/admin/students",
-      subtitle: `${active} active, ${pending} pending`
-    },
-    {
-      label: "Avg Download Speed",
-      value: avgDownloadSpeed,
-      unit: "Mbps",
-      color: "success",
-      Icon: ArrowDown,
-      href: "/admin/students?status=ACTIVE",
-      subtitle: `Peak: ${peakDownloadSpeed} Mbps`
-    },
-    {
-      label: "Avg Upload Speed",
-      value: avgUploadSpeed,
-      unit: "Mbps",
-      color: "warning",
-      Icon: ArrowUp,
-      href: "/admin/students?status=ACTIVE",
-      subtitle: `Peak: ${peakUploadSpeed} Mbps`
-    },
-    {
-      label: "Connected Devices",
-      value: approvedDevices,
-      color: "accent",
-      Icon: Wifi,
-      href: "/admin/devices",
-      subtitle: `${avgDevicesPerStudent} avg per student`
-    },
-  ];
 
   return (
     <>
@@ -76,23 +62,23 @@ export default async function AdminDashboard() {
 
       {/* Stat cards — fixed 4-col on desktop */}
       <div className="stat-grid">
-        {stats.map((s) => (
-          <Link key={s.label} href={s.href} style={{ textDecoration: "none" }}>
-            <div className="stat-card">
-              <div className={`stat-card-icon ${s.color}`}>
-                <s.Icon size={24} strokeWidth={2} />
-              </div>
-              <div className="stat-card-label">{s.label}</div>
-              <div className="stat-card-value">
-                {s.value}
-                {s.unit && <span style={{ fontSize: "1.2rem", fontWeight: 600, marginLeft: 6, color: "var(--text-muted)" }}>{s.unit}</span>}
-              </div>
-              <div className="stat-card-trend">
-                {s.subtitle}
-              </div>
-            </div>
-          </Link>
-        ))}
+        <StatCard s={{
+          label: "Total Students",
+          value: totalStudents,
+          color: "accent",
+          Icon: Users,
+          href: "/admin/students",
+          subtitle: `${active} active, ${pending} pending`
+        }} />
+        <NetworkSpeedCards />
+        <StatCard s={{
+          label: "Connected Devices",
+          value: approvedDevices,
+          color: "accent",
+          Icon: Wifi,
+          href: "/admin/devices",
+          subtitle: `${avgDevicesPerStudent} avg per student`
+        }} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 20 }}>
@@ -320,36 +306,7 @@ export default async function AdminDashboard() {
               )}
 
               {/* Network Speed Info */}
-              <div style={{
-                padding: 14,
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border)",
-                borderRadius: 10
-              }}>
-                <div style={{ fontSize: ".85rem", fontWeight: 600, color: "var(--text-primary)", marginBottom: 12 }}>
-                  Network Performance
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <ArrowDown size={14} color="var(--success)" />
-                      <span style={{ fontSize: ".8rem", color: "var(--text-secondary)" }}>Download</span>
-                    </div>
-                    <span style={{ fontSize: ".85rem", fontWeight: 700, color: "var(--success)" }}>
-                      {avgDownloadSpeed} Mbps
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <ArrowUp size={14} color="var(--warning)" />
-                      <span style={{ fontSize: ".8rem", color: "var(--text-secondary)" }}>Upload</span>
-                    </div>
-                    <span style={{ fontSize: ".85rem", fontWeight: 700, color: "var(--warning)" }}>
-                      {avgUploadSpeed} Mbps
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <NetworkPerformancePanel />
             </div>
           </div>
         </div>
